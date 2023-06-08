@@ -1,0 +1,232 @@
+"use client";
+import JSZip from "jszip";
+import React, { useState } from "react";
+
+const ShowCompressorImages = () => {
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [compressedImages, setCompressedImages] = useState([]);
+  const [downloadImages, setDownloadImages] = useState([]);
+
+  const handleFileChange = (e) => {
+    const files = e.target.files;
+    setSelectedImages([]);
+    setCompressedImages([]);
+    const imagesArray = Array.from(files);
+    setDownloadImages(imagesArray);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const url = event.target.result;
+        const image = new Image();
+
+        image.onload = () => {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          //   const maxWidth = 800; // Maximum width for the compressed image
+          //   const maxHeight = 800; // Maximum height for the compressed image
+
+          let width = image.width;
+          let height = image.height;
+
+          //   if (width > height) {
+          //     if (width > maxWidth) {
+          //       height *= maxWidth / width;
+          //       width = maxWidth;
+          //     }
+          //   } else {
+          //     if (height > maxHeight) {
+          //       width *= maxHeight / height;
+          //       height = maxHeight;
+          //     }
+          //   }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          ctx.drawImage(image, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              const compressedUrl = URL.createObjectURL(blob);
+              setSelectedImages((prevImages) => [...prevImages, url]);
+              setCompressedImages((prevImages) => [
+                ...prevImages,
+                { url: compressedUrl, size: blob.size },
+              ]);
+            },
+            file.type, // Use the original file type
+            0.7 // Set the image quality (0.7 is 70% quality)
+          );
+        };
+
+        image.src = url;
+      };
+
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const compressAndDownloadImages = (imageFiles) => {
+    let compressedZip = new JSZip();
+
+    let promises = [];
+
+    // Iterate through each image file
+    for (let i = 0; i < imageFiles.length; i++) {
+      let imageFile = imageFiles[i];
+      let promise = new Promise(function (resolve, reject) {
+        let reader = new FileReader();
+
+        reader.onload = function (event) {
+          let image = new Image();
+
+          image.onload = function () {
+            let canvas = document.createElement("canvas");
+            let ctx = canvas.getContext("2d");
+
+            // Calculate the new width and height for the compressed image
+            let width = image.width;
+            let height = image.height;
+
+            // Set the canvas dimensions
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw the image on the canvas
+            ctx.drawImage(image, 0, 0, width, height);
+
+            // Get the compressed data URL
+            let compressedDataURL = canvas.toDataURL("image/*", 0.7); // Set the desired compression quality here (0.0 - 1.0)
+
+            // Convert the data URL to a Blob
+            let blob = dataURLToBlob(compressedDataURL);
+
+            // Add the compressed image file to the ZIP
+            compressedZip.file(`${imageFile.name}`, blob);
+
+            resolve();
+          };
+
+          image.src = event.target.result;
+        };
+
+        reader.readAsDataURL(imageFile);
+      });
+
+      promises.push(promise);
+    }
+
+    // Wait for all the promises to resolve
+    Promise.all(promises).then(function () {
+      // Generate the ZIP file
+      compressedZip.generateAsync({ type: "blob" }).then(function (content) {
+        // Create a download link for the ZIP file
+        let link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = "compressed_images.zip";
+        link.click();
+
+        compressedZip = null; // Clean up the ZIP object
+      });
+    });
+  };
+
+  // Helper function to convert data URL to Blob
+  const dataURLToBlob = (dataURL) => {
+    let parts = dataURL.split(";base64,");
+    let contentType = parts[0].replace("data:", "");
+    let byteString = atob(parts[1]);
+    let arrayBuffer = new ArrayBuffer(byteString.length);
+    let uint8Array = new Uint8Array(arrayBuffer);
+
+    for (let i = 0; i < byteString.length; i++) {
+      uint8Array[i] = byteString.charCodeAt(i);
+    }
+
+    return new Blob([arrayBuffer], { type: contentType });
+  };
+
+  const handleCompressAndDownload = () => {
+    compressAndDownloadImages(downloadImages);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-center w-full px-20 my-10">
+        <label
+          htmlFor="dropzone-file"
+          className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:hover:bg-bray-800 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600"
+        >
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <svg
+              aria-hidden="true"
+              className="w-10 h-10 mb-3 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+              <span className="font-semibold">Click to upload</span> or drag and
+              drop
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              SVG, PNG, JPG or GIF (MAX. 800x400px)
+            </p>
+          </div>
+          <input
+            id="dropzone-file"
+            className="hidden"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileChange}
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 px-10 place-content-center place-items-center">
+        <div>
+          <h2>Selected Images:</h2>
+          {selectedImages.map((url, index) => (
+            <div key={index}>
+              <img src={url} alt={`Selected Image ${index + 1}`} />
+              <p>File size: {Math.round(url.length / 1024)} KB</p>
+            </div>
+          ))}
+        </div>
+        <div>
+          <h2>Compressed Images:</h2>
+          {compressedImages.map((image, index) => (
+            <div key={index}>
+              <img src={image.url} alt={`Compressed Image ${index + 1}`} />
+              <p>File size: {Math.round(image.size / 1024)} KB</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-center items-center my-10">
+        <button
+          className="bg-emerald-700 rounded-xl text-white text-xl py-2 px-4"
+          onClick={handleCompressAndDownload}
+        >
+          Download
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default ShowCompressorImages;
